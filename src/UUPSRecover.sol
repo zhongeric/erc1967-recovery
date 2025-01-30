@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {IERC1822Proxiable} from "@openzeppelin/contracts/interfaces/draft-IERC1822.sol";
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
 /// @title UUPSRecover
-/// @dev A singleton contract meant to allow for generic recovery of ERC1967 proxies.
-contract UUPSRecover is UUPSUpgradeable {
+/// @notice A singleton contract meant to allow for generic recovery of ERC1967 proxies.
+/// @dev This contract should NOT be the target of a proxy, but rather should be delegate called by implementations.
+///      the desired use case is to allow both the implementation and this contract to upgrade the proxy's ERC1967 slot.
+contract UUPSRecover {
     error Unauthorized();
+    error OnlyDelegated();
     error UpgradeFailed();
-    error CannotBeProxied();
+    /**
+     * @dev The storage `slot` is unsupported as a UUID.
+     */
+    error UUPSUnsupportedProxiableUUID(bytes32 slot);
 
     struct Storage {
         address recoveryPublicKey;
@@ -28,12 +35,15 @@ contract UUPSRecover is UUPSUpgradeable {
         $.recoveryPublicKey = publicKey;
     }
 
-    /// @dev Sets the recovery public key.
-    /// @param publicKey The public key to set.
-    function setRecoveryPublicKey(address publicKey) public {
-        _setRecoveryPublicKey(publicKey);
+    /// @notice Only allow delegated calls
+    modifier onlyDelegated() {
+        if (msg.sender != address(this)) {
+            revert OnlyDelegated();
+        }
+        _;
     }
 
+    /// @notice Requires a valid signature from the registered recovery public key
     modifier onlyRecoveryWithSignature(bytes32 digest, bytes memory signature) {
         Storage storage $ = _getStorage();
         (uint8 v, bytes32 r, bytes32 s) = abi.decode(signature, (uint8, bytes32, bytes32));
@@ -44,28 +54,44 @@ contract UUPSRecover is UUPSUpgradeable {
         _;
     }
 
-    /// @dev This contract should NOT be the target of a proxy
-    function upgradeToAndCall(address, bytes memory) public payable override notDelegated {}
-
-    function _authorizeUpgrade(address newImplementation) internal override notDelegated {}
-
-    ///
+    /// @dev Sets the recovery public key.
+    /// @param publicKey The public key to set.
+    function setRecoveryPublicKey(address publicKey) public onlyDelegated {
+        _setRecoveryPublicKey(publicKey);
+    }
 
     function _authorizeUpgrade(address newImplementation, bytes32 digest, bytes memory signature)
         internal
         onlyRecoveryWithSignature(digest, signature)
     {}
 
-    /// @dev Meant to be callable by implementations
-    function upgradeToAndCall(address newImplementation, bytes memory data, bytes memory signature) public payable {
+    function upgradeToAndCall(address newImplementation, bytes memory data, bytes memory signature)
+        public
+        payable
+        onlyDelegated
+    {
         bytes32 digest = keccak256(abi.encode(newImplementation, data));
         _authorizeUpgrade(newImplementation, digest, signature);
-        // self delegateCall
-        (bool success,) = address(this).delegatecall(
-            abi.encodeWithSelector(UUPSUpgradeable.upgradeToAndCall.selector, newImplementation, data)
-        );
-        if (!success) {
-            revert UpgradeFailed();
+        _upgradeToAndCallUUPS(newImplementation, data);
+    }
+
+    /**
+     * @dev Performs an implementation upgrade with a security check for UUPS proxies, and additional setup call.
+     *
+     * As a security check, {proxiableUUID} is invoked in the new implementation, and the return value
+     * is expected to be the implementation slot in ERC-1967.
+     *
+     * Emits an {IERC1967-Upgraded} event.
+     */
+    function _upgradeToAndCallUUPS(address newImplementation, bytes memory data) private {
+        try IERC1822Proxiable(newImplementation).proxiableUUID() returns (bytes32 slot) {
+            if (slot != ERC1967Utils.IMPLEMENTATION_SLOT) {
+                revert UUPSUnsupportedProxiableUUID(slot);
+            }
+            ERC1967Utils.upgradeToAndCall(newImplementation, data);
+        } catch {
+            // The implementation is not UUPS
+            revert ERC1967Utils.ERC1967InvalidImplementation(newImplementation);
         }
     }
 }

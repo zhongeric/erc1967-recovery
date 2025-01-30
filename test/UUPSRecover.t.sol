@@ -94,7 +94,7 @@ contract UUPSRecoverTest is Test {
 
     function test_UpgradeWithSignature() public {
         // Deploy new implementation
-        UUPSRecover newImplementation = new UUPSRecover();
+        MockImplementation newImplementation = new MockImplementation();
 
         bytes memory data = "";
         bytes32 digest = keccak256(abi.encode(address(newImplementation), data));
