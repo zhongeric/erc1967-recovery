@@ -21,10 +21,49 @@ The contract uses:
 - ECDSA signatures for authorization
 - Delegate call pattern for upgrades
 
-Reference implementation:
-```solidity:src/UUPSRecover.sol
-startLine: 1
-endLine: 97
+## Flow Diagram
+
+The following sequence diagram shows the end-to-end flow for a signature-based upgrade:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant ALICE as Alice's EOA
+    participant Proxy as Mock1967Proxy
+    participant Implementation as MockImplementation
+    participant UUPSRecover
+    participant NewImpl as New Implementation
+
+    Note over User,NewImpl: Setup Phase
+    User->>Implementation: Deploy MockImplementation
+    User->>Proxy: Deploy Mock1967Proxy(implementation, "")
+    User->>UUPSRecover: Deploy UUPSRecover
+    User->>ALICE: Etch delegation code
+    Note right of ALICE: Proxy delegation<br/>is written to EOA
+
+    Note over User,NewImpl: Recovery Key Setup
+    User->>ALICE: Generate recovery keypair
+    ALICE->>UUPSRecover: delegatecall setRecoveryPublicKey()
+    UUPSRecover->>UUPSRecover: Store recovery public key
+
+    Note over User,NewImpl: Upgrade Process
+    User->>NewImpl: Deploy new implementation
+    Note over User: Create upgrade message
+    User->>User: digest = keccak256(abi.encode(newImpl, ""))
+    Note over User: Sign with recovery key
+    User->>User: sign(recoveryPrivateKey, digest)
+
+    Note over User,NewImpl: Execute Upgrade
+    User->>ALICE: Call with upgrade data
+    ALICE->>UUPSRecover: delegatecall upgradeToAndCall()
+    UUPSRecover->>UUPSRecover: Verify signature
+    UUPSRecover->>Proxy: Update implementation slot
+    UUPSRecover-->>ALICE: Return success
+    ALICE-->>User: Return success
+
+    Note over User,NewImpl: Verification
+    User->>Proxy: Verify implementation address
+    Proxy-->>User: Return new implementation address
 ```
 
 ## Usage
@@ -46,31 +85,6 @@ bytes memory data = abi.encode(
 (bool success,) = address(this).delegatecall(data);
 ```
 
-### Performing Recovery
-
-To upgrade using the recovery key:
-
-1. Create upgrade message:
-```solidity
-bytes32 digest = keccak256(abi.encode(newImplementation, data));
-```
-
-2. Sign the digest with recovery private key
-
-3. Execute upgrade:
-```solidity
-bytes memory data = abi.encode(
-    address(recover),
-    abi.encodeWithSignature(
-        "upgradeToAndCall(address,bytes,bytes)",
-        newImplementation,
-        data,
-        signature
-    )
-);
-(bool success,) = address(this).delegatecall(data);
-```
-
 ## Security Considerations
 
 - The recovery key has full upgrade authority - it should be stored securely and used only for recovery
@@ -80,21 +94,6 @@ bytes memory data = abi.encode(
   - Delegate call requirements
 - All upgrade operations require valid signatures from the designated recovery key
 - The contract follows OpenZeppelin's standard implementation slot for UUPS proxies
-
-## Testing
-
-The contract includes comprehensive tests covering:
-```solidity:test/UUPSRecover.t.sol
-startLine: 1
-endLine: 122
-```
-
-Key test scenarios:
-- Normal upgrade flows
-- Recovery key management
-- Signature validation
-- Security checks and reverts
-- Storage slot handling
 
 ## References
 
