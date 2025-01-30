@@ -19,8 +19,10 @@ contract MockImplementation is UUPSUpgradeable {
         return 1;
     }
 
-    /// @dev Fallback function that delegate calls to the specified target
+    /// @dev Fallback function that delegate calls to the specified target, unsafe
     fallback() external {
+        require(msg.sender == address(this), "Fallback not allowed");
+
         (address target, bytes memory data) = abi.decode(msg.data, (address, bytes));
 
         (bool success, bytes memory returndata) = target.delegatecall(data);

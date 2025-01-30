@@ -9,7 +9,11 @@ interface IMock1967Proxy {
     function upgradeToAndCall(address newImplementation, bytes memory data) external;
 }
 
+/// @dev A mock ERC1967 proxy that allows for upgrades to be performed by the proxy itself.
+/// Meant to be used with 7702 delegations
 contract Mock1967Proxy is ERC1967Proxy {
+    error Unauthorized();
+
     constructor(address implementation_, bytes memory _data) ERC1967Proxy(implementation_, _data) {}
 
     function implementation() external view returns (address) {
@@ -21,6 +25,9 @@ contract Mock1967Proxy is ERC1967Proxy {
     }
 
     function upgradeToAndCall(address newImplementation, bytes memory data) external {
+        if (msg.sender != address(this)) {
+            revert Unauthorized();
+        }
         ERC1967Utils.upgradeToAndCall(newImplementation, data);
     }
 

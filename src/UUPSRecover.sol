@@ -7,6 +7,7 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 /// @dev A singleton contract meant to allow for generic recovery of ERC1967 proxies.
 contract UUPSRecover is UUPSUpgradeable {
     error Unauthorized();
+    error UpgradeFailed();
     error CannotBeProxied();
 
     struct Storage {
@@ -44,11 +45,11 @@ contract UUPSRecover is UUPSUpgradeable {
     }
 
     /// @dev This contract should NOT be the target of a proxy
-    function upgradeToAndCall(address, bytes memory) public payable override {
-        revert CannotBeProxied();
-    }
+    function upgradeToAndCall(address, bytes memory) public payable override notDelegated {}
 
-    function _authorizeUpgrade(address newImplementation) internal override {}
+    function _authorizeUpgrade(address newImplementation) internal override notDelegated {}
+
+    ///
 
     function _authorizeUpgrade(address newImplementation, bytes32 digest, bytes memory signature)
         internal
@@ -64,7 +65,7 @@ contract UUPSRecover is UUPSUpgradeable {
             abi.encodeWithSelector(UUPSUpgradeable.upgradeToAndCall.selector, newImplementation, data)
         );
         if (!success) {
-            revert("UUPSUpgradeable: upgrade failed");
+            revert UpgradeFailed();
         }
     }
 }

@@ -21,7 +21,7 @@ contract UUPSRecoverTest is Test {
     uint256 alicePrivateKey = 0x1234;
     address payable ALICE = payable(vm.addr(alicePrivateKey));
 
-    function prankAndSelfCall(bytes memory data) internal returns (bool success, bytes memory returnData) {
+    function selfCall(bytes memory data) internal returns (bool success, bytes memory returnData) {
         vm.prank(ALICE);
         (success, returnData) = ALICE.call(data);
     }
@@ -40,6 +40,7 @@ contract UUPSRecoverTest is Test {
         vm.etch(ALICE, bytes.concat(hex"ef0100", abi.encodePacked(proxy)));
         require(ALICE.code.length > 0, "ALICE must have code");
 
+        vm.prank(ALICE);
         IMock1967Proxy(ALICE).upgradeToAndCall(address(implementation), "");
 
         // Deploy recover
@@ -55,13 +56,14 @@ contract UUPSRecoverTest is Test {
         // Set recovery key
         bytes memory data =
             abi.encode(address(recover), abi.encodeWithSelector(UUPSRecover.setRecoveryPublicKey.selector, recoveryKey));
-        (bool success,) = prankAndSelfCall(data);
+        (bool success,) = selfCall(data);
         assertTrue(success, "Failed to set recovery key");
     }
 
     function test_NormalUpgrade() public {
         // Deploy new implementation
         UUPSRecover newImplementation = new UUPSRecover();
+        vm.prank(ALICE);
         IMock1967Proxy(ALICE).upgradeToAndCall(address(newImplementation), "");
 
         // read implementation slot
@@ -74,7 +76,7 @@ contract UUPSRecoverTest is Test {
         address newKey = makeAddr("newKey");
         bytes memory data =
             abi.encode(address(recover), abi.encodeWithSelector(UUPSRecover.setRecoveryPublicKey.selector, newKey));
-        (bool success,) = prankAndSelfCall(data);
+        (bool success,) = selfCall(data);
         assertTrue(success, "Failed to set recovery key");
 
         // Access storage directly using the same slot derivation
@@ -86,7 +88,7 @@ contract UUPSRecoverTest is Test {
     function test_OnlyProxyCanSetRecoveryKey() public {
         vm.expectRevert(UUPSUnauthorizedCallContext.selector);
         bytes memory data = abi.encodeWithSelector(UUPSRecover.setRecoveryPublicKey.selector, address(0));
-        (bool success,) = prankAndSelfCall(data);
+        (bool success,) = selfCall(data);
         assertTrue(!success, "Expected revert");
     }
 
@@ -106,7 +108,7 @@ contract UUPSRecoverTest is Test {
                 "upgradeToAndCall(address,bytes,bytes)", address(newImplementation), data, signature
             )
         );
-        (bool success,) = prankAndSelfCall(callData);
+        (bool success,) = selfCall(callData);
         assertTrue(success, "Failed to upgrade");
 
         bytes32 slot = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
@@ -131,7 +133,7 @@ contract UUPSRecoverTest is Test {
             )
         );
         vm.expectRevert(UUPSRecover.Unauthorized.selector);
-        prankAndSelfCall(callData);
+        selfCall(callData);
     }
 
     function test_RevertZeroAddressSignature() public {
@@ -148,6 +150,6 @@ contract UUPSRecoverTest is Test {
             )
         );
         vm.expectRevert(UUPSRecover.Unauthorized.selector);
-        prankAndSelfCall(callData);
+        selfCall(callData);
     }
 }
