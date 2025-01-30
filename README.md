@@ -27,43 +27,43 @@ The following sequence diagram shows the end-to-end flow for a signature-based u
 
 ```mermaid
 sequenceDiagram
-    participant User
+    participant TestRunner
     participant ALICE as Alice's EOA
     participant Proxy as Mock1967Proxy
     participant Implementation as MockImplementation
     participant UUPSRecover
     participant NewImpl as New Implementation
 
-    Note over User,NewImpl: Setup Phase
-    User->>Implementation: Deploy MockImplementation
-    User->>Proxy: Deploy Mock1967Proxy(implementation, "")
-    User->>UUPSRecover: Deploy UUPSRecover
-    User->>ALICE: Etch delegation code
+    Note over TestRunner,NewImpl: Setup Phase
+    TestRunner->>Implementation: Deploy MockImplementation
+    TestRunner->>Proxy: Deploy Mock1967Proxy(implementation, "")
+    TestRunner->>UUPSRecover: Deploy UUPSRecover
+    TestRunner->>ALICE: Etch delegation code
     Note right of ALICE: Proxy delegation<br/>is written to EOA
 
-    Note over User,NewImpl: Recovery Key Setup
-    User->>ALICE: Generate recovery keypair
+    Note over TestRunner,NewImpl: Recovery Key Setup
+    TestRunner->>ALICE: Generate recovery keypair
     ALICE->>UUPSRecover: delegatecall setRecoveryPublicKey()
     UUPSRecover->>UUPSRecover: Store recovery public key
 
-    Note over User,NewImpl: Upgrade Process
-    User->>NewImpl: Deploy new implementation
-    Note over User: Create upgrade message
-    User->>User: digest = keccak256(abi.encode(newImpl, ""))
-    Note over User: Sign with recovery key
-    User->>User: sign(recoveryPrivateKey, digest)
+    Note over TestRunner,NewImpl: Upgrade Process
+    TestRunner->>NewImpl: Deploy new implementation
+    Note over TestRunner: Create upgrade message
+    TestRunner->>TestRunner: digest = keccak256(abi.encode(newImpl, ""))
+    Note over TestRunner: Sign with recovery key
+    TestRunner->>TestRunner: sign(recoveryPrivateKey, digest)
 
-    Note over User,NewImpl: Execute Upgrade
-    User->>ALICE: Call with upgrade data
+    Note over TestRunner,NewImpl: Execute Upgrade
+    TestRunner->>ALICE: Call with upgrade data
     ALICE->>UUPSRecover: delegatecall upgradeToAndCall()
     UUPSRecover->>UUPSRecover: Verify signature
     UUPSRecover->>Proxy: Update implementation slot
     UUPSRecover-->>ALICE: Return success
-    ALICE-->>User: Return success
+    ALICE-->>TestRunner: Return success
 
-    Note over User,NewImpl: Verification
-    User->>Proxy: Verify implementation address
-    Proxy-->>User: Return new implementation address
+    Note over TestRunner,NewImpl: Verification
+    TestRunner->>Proxy: Verify implementation address
+    Proxy-->>TestRunner: Return new implementation address
 ```
 
 ## Usage
